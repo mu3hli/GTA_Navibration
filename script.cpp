@@ -69,7 +69,7 @@ void main() {
 	Vector3 position;
 	std::ofstream file;
 	std::string coords_str;
-	float d;
+	float d,angleToDestination;
 	bool arrived = false, pressed = false, notpressed = true;
 	unsigned char anglearea = 0, output, lastoutput = 0;
 	float x = 668.738, y = 497.866;
@@ -140,16 +140,18 @@ void main() {
 		d = distance(position.x, position.y, position.z, x ,y , position.z);
 		arrived = d < 100;
 
-		if (ENTITY::GET_ENTITY_HEADING(playerPed) > 0 && ENTITY::GET_ENTITY_HEADING(playerPed) < 15) anglearea = 0;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 15 && ENTITY::GET_ENTITY_HEADING(playerPed) < 45) anglearea = 1;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 45 && ENTITY::GET_ENTITY_HEADING(playerPed) < 90) anglearea = 2;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 90 && ENTITY::GET_ENTITY_HEADING(playerPed) < 135) anglearea = 3;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 135 && ENTITY::GET_ENTITY_HEADING(playerPed) < 180) anglearea = 4;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 180 && ENTITY::GET_ENTITY_HEADING(playerPed) < 225) anglearea = 4;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 225 && ENTITY::GET_ENTITY_HEADING(playerPed) < 270) anglearea = 5;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 270 && ENTITY::GET_ENTITY_HEADING(playerPed) < 315) anglearea = 6;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 315 && ENTITY::GET_ENTITY_HEADING(playerPed) < 345) anglearea = 7;
-		else if (ENTITY::GET_ENTITY_HEADING(playerPed) >= 345 && ENTITY::GET_ENTITY_HEADING(playerPed) <= 360) anglearea = 0;
+		angleToDestination = acos(abs(position.x - x) / abs(position.y - y));
+
+		if (angleToDestination > 0 && angleToDestination < 15) anglearea = 0;
+		else if (angleToDestination >= 15 && angleToDestination < 45) anglearea = 1;
+		else if (angleToDestination >= 45 && angleToDestination < 90) anglearea = 2;
+		else if (angleToDestination >= 90 && angleToDestination < 135) anglearea = 3;
+		else if (angleToDestination >= 135 && angleToDestination < 180) anglearea = 4;
+		else if (angleToDestination >= 180 && angleToDestination < 225) anglearea = 4;
+		else if (angleToDestination >= 225 && angleToDestination < 270) anglearea = 5;
+		else if (angleToDestination >= 270 && angleToDestination < 315) anglearea = 6;
+		else if (angleToDestination >= 315 && angleToDestination < 345) anglearea = 7;
+		else if (angleToDestination >= 345 && angleToDestination <= 360) anglearea = 0;
 
 		output = anglearea  | (arrived << 4);
 
