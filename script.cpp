@@ -10,7 +10,9 @@
 #include <windows.h>
 #include <atlstr.h>
 #include <iostream>
+#include <math.h>
 #include <chrono> 
+
 #define KEY_DOWN(vk_code) ((GetAsyncKeyState(vk_code) & 0x8000) ? 1 : 0)
 #define KEY_UP(vk_code) ((GetAsyncKeyState(vk_code) & 0x8000) ? 0 : 1)
 
@@ -64,7 +66,8 @@ float distance(float x1, float y1, float z1, float x2, float y2, float z2)
 }
 
 constexpr double kCheckComPortInterval = 10.0;
-constexpr double kSendInterval = 3.0;
+constexpr double kSendInterval = 1.0;
+
 //bool connectToComDevice(DCB &dcb, HANDLE &hPort, DWORD &byteswritten) {
 //	 hPort = CreateFile(
 //
@@ -93,17 +96,20 @@ void main() {
 	Vector3 position;
 	std::ofstream file;
 	std::string coords_str;
-	float d, angleToDestination;
+	float d, angleToDestination =0;
 	bool arrived = false, pressed = false, notpressed = true;
 	unsigned char anglearea = 0;
-	byte output[2] = { 0,0 }, last_output[2] = { 0,0 };
-	float x = 668.738, y = 497.866;
+	byte output[2] = { 0,0 }, last_output[2] = { 0,0 }, is_braking[1] = {0};
+	float x = -533.359, y = 242.829;
+
 	int endpoint = 0;
 
 
 	DCB dcb;
-	DWORD byteswritten = 0;
+	DWORD byteswritten = 0, event_mask = 0, com_bytes_read = 0;
 	HANDLE hPort;
+	OVERLAPPED overlapped;
+	COMMTIMEOUTS com_timeout;
 	bool com_is_connected = false;
 	//HANDLE hPort = CreateFile(
 
@@ -131,7 +137,7 @@ void main() {
 		position = ENTITY::GET_ENTITY_COORDS(playerPed, 1);
 		widescreen = GRAPHICS::GET_IS_WIDESCREEN();
 
-		char coords[100], text[300], message[100];
+		char text[300];
 
 
 		com_timer_elapsed = std::chrono::high_resolution_clock::now() - com_timer_start;
@@ -141,14 +147,20 @@ void main() {
 		if (!com_is_connected) {
 
 			hPort = CreateFile(
-				"COM3",
-				GENERIC_WRITE/*GENERIC_WRITE*/,
+				"COM4",
+				GENERIC_READ | GENERIC_WRITE/*GENERIC_WRITE*/,
 				0,
 				NULL,
 				OPEN_EXISTING,
 				0,
 				NULL
 			);
+			com_timeout.ReadIntervalTimeout = MAXDWORD;
+			com_timeout.ReadTotalTimeoutConstant = 0;
+			com_timeout.ReadTotalTimeoutConstant = 0;
+			com_timeout.WriteTotalTimeoutConstant = 9600;
+			com_timeout.WriteTotalTimeoutMultiplier = 0;
+			SetCommTimeouts(hPort, &com_timeout);
 			if (GetCommState(hPort, &dcb) == 0) {
 				sprintf_s(text, "Error %d when GetComState", GetLastError());
 				widescreen ? draw_text(text, 0.100, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
@@ -165,15 +177,28 @@ void main() {
 				else {
 					sprintf_s(text, "COM Device connected");
 					widescreen ? draw_text(text, 0.300, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
-					com_is_connected = true;
+
+					if (SetCommMask(hPort, EV_RXCHAR) == 0) {
+						sprintf_s(text, "Error %d when SetCommMask", GetLastError());
+						widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+					}
+					else {
+						overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+						overlapped.Internal = 0;
+						overlapped.InternalHigh = 0;
+						overlapped.Offset = 0;
+						overlapped.OffsetHigh = 0;
+
+						com_is_connected = true;
+					}
 				}
 			}
 			//if (connectToComDevice(dcb, hPort, byteswritten)) {
 			// 				com_is_connected = true;
 			//}
 			//else {
-			//	sprintf_s(message, "Error %d for init com state", GetLastError());
-			//	widescreen ? draw_text(message, 0.500, 0.205 - 0.03, 0.3) : draw_text(message, 0.938, 0.205, 0.3);
+			//	sprintf_s(text, "Error %d for init com state", GetLastError());
+			//	widescreen ? draw_text(text, 0.500, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
 			//}
 		}
 		else if (com_timer_elapsed.count() > kCheckComPortInterval) {
@@ -189,10 +214,74 @@ void main() {
 		/*file.open("coords.txt", std::ios_base::out);
 		file << "x: " << position.x << " y: " << position.y  << " z: " << position.z << " angel: " << ENTITY::GET_ENTITY_HEADING(playerPed) << std::endl;
 		file.close();*/
+		if (com_is_connected) {
+			if(ReadFile(hPort, is_braking, 1, &com_bytes_read, &overlapped) == 0){
+				sprintf_s(text, "Error %d when Reading file", GetLastError());
+				widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
 
+			}
+			else {
+			if (com_bytes_read > 0) {
+						//sprintf_s(text, "Received Char from Bridge %d", is_braking[0]);
+						//widescreen ? draw_text(text, 0.500, 0.405 - 0.03, 0.3) : draw_text(text, 0.878, 0.205, 0.3);
 
-		sprintf_s(message, "COM: %d, Output: %d %d, Last: %d %d", com_is_connected, output[0], output[1], last_output[0],last_output[1]);
-		widescreen ? draw_text(message, 0.500, 0.205 - 0.03, 0.3) : draw_text(message, 0.878, 0.205, 0.3);
+			}
+			}
+			sprintf_s(text, "breaking: %d", is_braking[0]);
+			widescreen ? draw_text(text, 0.500, 0.405 - 0.03, 0.3) : draw_text(text, 0.878, 0.205, 0.3);
+		//if (WaitCommEvent(hPort, &event_mask, &overlapped)) {
+		//	if (event_mask & EV_RXCHAR) {
+		//		ReadFile(hPort, is_braking, 1, &com_bytes_read, &overlapped);
+		//		sprintf_s(text, "Received Char from Bridge %d", is_braking[0]);
+		//		widescreen ? draw_text(text, 0.500, 0.405 - 0.03, 0.3) : draw_text(text, 0.878, 0.205, 0.3);
+		//		//TODO Read file and execute braking
+		//	}
+		//}
+		//else {
+		//	DWORD error = GetLastError();
+		//	if (ERROR_IO_PENDING ==error ) {
+		//		sprintf_s(text, "ERROR Pending IO");
+		//		widescreen ? draw_text(text, 0.500, 0.405 - 0.03, 0.3) : draw_text(text, 0.878, 0.205, 0.3);
+		//	}
+		//	else {
+		//		sprintf_s(text, "Wait failed with error %d", error);
+		//		widescreen ? draw_text(text, 0.500, 0.405 - 0.03, 0.3) : draw_text(text, 0.878, 0.205, 0.3);
+		//	}
+		//}
+		}
+
+		sprintf_s(text, "COM: %d, Output: %d %d, Last: %d %d", com_is_connected, output[0], output[1], last_output[0],last_output[1]);
+		widescreen ? draw_text(text, 0.500, 0.205 - 0.03, 0.3) : draw_text(text, 0.878, 0.205, 0.3);
+		
+		if (is_braking[0] > 0) {
+			//INPUT input[1] = {};
+			//input[0].type = INPUT_KEYBOARD;
+			//input[0].ki.dwFlags = KEYEVENTF_SCANCODE,
+			//input[0].ki.wScan = 0x53; //S Key
+			VEHICLE::SET_VEHICLE_FORWARD_SPEED(PED::GET_VEHICLE_PED_IS_IN(playerPed, false), 0);
+			//UINT uSent = SendInput(1, input, sizeof(INPUT));
+			//VEHICLE::SET_VEHICLE_HANDBRAKE(PED::GET_VEHICLE_PED_IS_IN(playerPed, false), true);
+			//if (uSent != 1)
+			//{
+			//	sprintf_s(text, "SendInput failed: 0x%x", HRESULT_FROM_WIN32(GetLastError()));
+			//	widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+			//}
+			//else {
+			//	sprintf_s(text, "SendInput success");
+			//	widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+			//}
+
+			/*sprintf_s(text, "Sending brake command");
+			widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+			//keyqbd_event(0x53, 0, 0, 0);
+			*/
+		}
+		//else {
+		//	VEHICLE::SET_VEHICLE_HANDBRAKE(PED::GET_VEHICLE_PED_IS_IN(playerPed, false), false);
+
+		//}
+
+		
 		if (!KEY_DOWN(0x60)) pressed = false;
 
 		if (KEY_DOWN(0x60) && pressed == false)
@@ -210,13 +299,17 @@ void main() {
 
 		}
 
-		//sprintf_s(message, "Neues Ziel: X: %.3f Y: %.3f", x, y);
-		//widescreen ? draw_text(message, 0.938, 0.205 - 0.03, 0.3) : draw_text(message, 0.938, 0.205, 0.3);
+		//sprintf_s(text, "Neues Ziel: X: %.3f Y: %.3f", x, y);
+		//widescreen ? draw_text(text, 0.938, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
 
 		d = distance(position.x, position.y, position.z, x, y, position.z);
 		arrived = d < 100;
 
-		angleToDestination = acos(abs(position.x - x) / abs(position.y - y));
+		//angleToDestination = atan2((int)y - (int)position.y,(int) x - (int)position.x)*180/3.14;
+		int angleGame = (atan2(y - position.y, x - position.x) * 180 / 3.14);
+		if (angleGame < 0) angleGame += 360;
+		angleToDestination =(int) ((angleGame - ENTITY::GET_ENTITY_HEADING(playerPed)) + 360) %360;
+		
 
 		//if (angleToDestination > 0 && angleToDestination < 15) anglearea = 0;
 		//else if (angleToDestination >= 15 && angleToDestination < 45) anglearea = 1;
@@ -230,9 +323,10 @@ void main() {
 		//else if (angleToDestination >= 345 && angleToDestination <= 360) anglearea = 0;
 
 		//output = anglearea  | (arrived << 4);
-		uint16_t angle = (unsigned int)ENTITY::GET_ENTITY_HEADING(playerPed);
+		//uint16_t angle = (unsigned int)ENTITY::GET_ENTITY_HEADING(playerPed);
+		uint16_t angle = (unsigned int) angleToDestination;
 		output[1] = angle;
-		output[0] = (angle >> 8 & 0x01);
+		output[0] = (angle >> 8 & 0x01) /*|| arrived << 1*/;
 		/*output[0] = angle;
 		output[1] = (angle & 0xFE) >> 8;*/
 
@@ -244,7 +338,7 @@ void main() {
 		sprintf_s(text, "[0]%d [1]%d ", output[0], output[1]);
 		widescreen ? draw_text(text, 0.938, 0.205 - 0.03, 0.3) : draw_text(text, 0.978, 0.205, 0.3);
 
-		sprintf_s(text, "Arrvied: %u Angel: %u", (unsigned int)arrived, (unsigned int)ENTITY::GET_ENTITY_HEADING(playerPed));
+		sprintf_s(text, "Arrived: %u (D:%2f) Angle: %f Heading: %f angleGame: %f", (unsigned int)arrived, d, angleToDestination, ENTITY::GET_ENTITY_HEADING(playerPed), angleGame);
 		widescreen ? draw_text(text, 0.958, 0.205 - 0.03, 0.3) : draw_text(text, 0.958, 0.205, 0.3);
 
 		sprintf_s(text, "X: %.3f Y: %.3f Z: %.3ff", position.x, position.y, position.z);
