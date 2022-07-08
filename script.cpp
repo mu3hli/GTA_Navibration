@@ -20,7 +20,7 @@
 
 void draw_text(char* text, float x, float y, float scale, bool pressedF12) {
 	
-	if (KEY_DOWN(0x60) && pressedF12 == false) {
+	if (pressedF12 == true) {
 		UI::SET_TEXT_FONT(0);
 		UI::SET_TEXT_SCALE(scale, scale);
 		UI::SET_TEXT_COLOUR(255, 255, 255, 245);
@@ -99,7 +99,7 @@ void main() {
 	Vector3 position;
 	std::ofstream file;
 	std::string coords_str;
-	float d, angleToDestination =0, x = -533.359, y = 242.829;
+	float d, angleToDestination =0, x = -533.359, y = 242.829, angleGame = 0;
 	bool arrived = false, pressedF12 = false, pressedNumPadNull = false, com_is_connected = false;
 	unsigned char anglearea = 0;
 	byte output[2] = { 0,0 }, last_output[2] = { 0,0 }, is_braking[1] = {0};
@@ -122,8 +122,8 @@ void main() {
 		com_timer_elapsed = std::chrono::high_resolution_clock::now() - com_timer_start;
 		double wait = 5.000;
 
-		if (!KEY_DOWN(0x7B)) pressedNumPadNull = false;
-		if (KEY_DOWN(0x7B) && pressedNumPadNull == false)
+		if (!KEY_DOWN(0x60)) pressedNumPadNull = false;
+		if (KEY_DOWN(0x60) && pressedNumPadNull == false)
 		{
 			pressedNumPadNull = true;
 			if (endpoint <= 5)  endpoint++;
@@ -138,8 +138,8 @@ void main() {
 
 		}
 
-		if (KEY_DOWN(0x60) && pressedF12 == false) pressedF12 = true;
-		else if (KEY_DOWN(0x60) && pressedF12 == true) pressedF12 = false;
+		if (KEY_DOWN(0x7B) && pressedF12 == false) pressedF12 = true;
+		else if (KEY_DOWN(0x7B) && pressedF12 == true) pressedF12 = false;
 
 		if (!com_is_connected) {
 
@@ -160,7 +160,7 @@ void main() {
 			SetCommTimeouts(hPort, &com_timeout);
 			if (GetCommState(hPort, &dcb) == 0) {
 				sprintf_s(text, "Error %d when GetComState", GetLastError());
-				widescreen ? draw_text(text, 0.100, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+				widescreen ? draw_text(text, 0.100, 0.205 - 0.03, 0.3, pressedF12) : draw_text(text, 0.938, 0.205, 0.3, pressedF12);
 			}
 			else {
 				dcb.BaudRate = CBR_9600; //9600 Baud
@@ -169,15 +169,15 @@ void main() {
 				dcb.StopBits = ONESTOPBIT; //1 stop
 				if (SetCommState(hPort, &dcb) == 0) {
 					sprintf_s(text, "Error %d when SetCommState", GetLastError());
-					widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+					widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3, pressedF12) : draw_text(text, 0.938, 0.205, 0.3, pressedF12);
 				}
 				else {
 					sprintf_s(text, "COM Device connected");
-					widescreen ? draw_text(text, 0.300, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+					widescreen ? draw_text(text, 0.300, 0.205 - 0.03, 0.3, pressedF12) : draw_text(text, 0.938, 0.205, 0.3, pressedF12);
 
 					if (SetCommMask(hPort, EV_RXCHAR) == 0) {
 						sprintf_s(text, "Error %d when SetCommMask", GetLastError());
-						widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3) : draw_text(text, 0.938, 0.205, 0.3);
+						widescreen ? draw_text(text, 0.200, 0.205 - 0.03, 0.3, pressedF12) : draw_text(text, 0.938, 0.205, 0.3, pressedF12);
 					}
 					else {
 						overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -275,14 +275,22 @@ void main() {
 
 		d = distance(position.x, position.y, position.z, x, y, position.z);
 		arrived = d < 100;
+		float DeltaY = y - position.y, DeltaX = x - position.x;
+		bool quantrant = false;
+		if (DeltaX < 0 && DeltaY >= 0) quantrant = true;									// 2.Qautrant x<0,Y>=0
+		if (DeltaX < 0 && DeltaY < 0) quantrant = true;										//3.Quatrant x<0,y<0
 
-		int angleGame = (atan2(y - position.y, x - position.x) * 180 / 3.14);
-		if (angleGame < 0) angleGame += 360;
-		angleToDestination = (int) ((angleGame - ENTITY::GET_ENTITY_HEADING(playerPed)) + 360) %360;
+		int AngleCorrection = 90;															// Winkel in Spiewelt ist um 90 Grad vrschoben 
 
-		if (angleToDestination > 90 && angleToDestination < 180) angleToDestination += 180;
-		if (angleToDestination > 180 && angleToDestination < 270) angleToDestination += 180;
-		
+		angleGame =atan2(DeltaY, DeltaX);
+		angleGame = angleGame * 180.0 / 3.141;
+		if (angleGame <= 0 && angleGame >= -180) angleGame += 180;							//Winkel über 0 bringen 
+		angleGame = ((int)angleGame + 360 + AngleCorrection) % 360;							//Auf max. 360 Grad
+
+		angleToDestination = (int)(angleGame + ENTITY::GET_ENTITY_HEADING(playerPed) ) % 360 ;	//Heading hinzufügen
+		if (quantrant == true)  angleToDestination = angleToDestination - 180;					// Quantranten Prüfen
+		if (angleToDestination < 0) angleToDestination += 360;									// falls < 0 prüfen 
+		angleToDestination = (int)(angleToDestination + 180) % 360;								//Winkel war um 180 Grad im Spiel verschoben
 
 		//if (angleToDestination > 0 && angleToDestination < 15) anglearea = 0;
 		//else if (angleToDestination >= 15 && angleToDestination < 45) anglearea = 1;
